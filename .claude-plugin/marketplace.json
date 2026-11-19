@@ -1,0 +1,19 @@
+{
+  "name": "boisvertmathieu-skills",
+  "owner": {
+    "name": "boisvertmathieu"
+  },
+  "metadata": {
+    "description": "Collection personnelle de skills pour Claude Code / Claude.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "qa-test-cases",
+      "description": "Analyse les modifications courantes d'un dépôt git et extrait, comme un analyste QA, des cas de tests structurés (JSON) réutilisables pour générer une collection Postman ou des scénarios Gherkin.",
+      "source": "./",
+      "strict": false,
+      "skills": ["./skills/qa-test-cases"]
+    }
+  ]
+}

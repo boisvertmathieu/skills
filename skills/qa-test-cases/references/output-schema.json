@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/boisvertmathieu/skills/qa-test-cases/output-schema.json",
+  "title": "QA Test Cases extracted from repository changes",
+  "description": "Sortie du skill qa-test-cases. Clés et énumérations en anglais ; textes libres dans la langue indiquée par `language`.",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "language", "source", "changeSummary", "context", "features"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generatedAt": { "type": "string", "description": "Date ISO 8601." },
+    "language": { "type": "string", "description": "Code de langue des textes libres (ex. fr, en)." },
+
+    "source": {
+      "type": "object",
+      "required": ["repository", "diffScope", "filesChanged"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string" },
+        "branch": { "type": "string" },
+        "baseRef": { "type": "string", "description": "Référence de comparaison (si diffScope = branch)." },
+        "headCommit": { "type": "string" },
+        "diffScope": { "enum": ["working-tree", "staged", "branch", "commit-range"] },
+        "commitMessages": { "type": "array", "items": { "type": "string" } },
+        "filesChanged": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "changeType"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string" },
+              "changeType": { "enum": ["added", "modified", "deleted", "renamed", "untracked"] },
+              "summary": { "type": "string" },
+              "testRelevant": { "type": "boolean", "description": "false pour les fichiers sans impact testable (doc, formatage)." }
+            }
+          }
+        }
+      }
+    },
+
+    "changeSummary": {
+      "type": "object",
+      "required": ["title", "description", "intent", "riskLevel"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "intent": { "enum": ["feature", "bugfix", "refactor", "performance", "security", "configuration", "data-migration", "dependency-update", "ui", "mixed"] },
+        "riskLevel": { "enum": ["low", "medium", "high", "critical"] },
+        "riskRationale": { "type": "string" },
+        "impactedAreas": { "type": "array", "items": { "type": "string" } },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "openQuestions": { "type": "array", "items": { "type": "string" } },
+        "outOfScope": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "context": {
+      "type": "object",
+      "required": ["variables"],
+      "additionalProperties": false,
+      "properties": {
+        "variables": {
+          "type": "array",
+          "description": "Variables d'environnement/collection (→ variables Postman). Inclure baseUrl si des appels API existent.",
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$" },
+              "description": { "type": "string" },
+              "example": {},
+              "secret": { "type": "boolean" }
+            }
+          }
+        },
+        "auth": {
+          "type": "array",
+          "description": "Profils d'authentification réutilisables, référencés par api.calls[].auth.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "type": { "enum": ["none", "bearer", "basic", "apiKey", "oauth2", "cookie", "custom"] },
+              "description": { "type": "string" },
+              "actorRef": { "type": "string" },
+              "config": {
+                "type": "object",
+                "description": "Ex. bearer: {token:'{{adminToken}}'} ; apiKey: {in:'header', key:'X-API-Key', value:'{{apiKey}}'} ; basic: {username, password}."
+              }
+            }
+          }
+        },
+        "actors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "roles": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "testData": {
+          "type": "array",
+          "description": "Jeux de données/fixtures nécessaires, référencés par testCases[].testDataRefs.",
+          "items": {
+            "type": "object",
+            "required": ["id", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "setup": { "type": "string", "description": "Comment créer la donnée (appel API, SQL, seed, UI)." },
+              "data": {}
+            }
+          }
+        }
+      }
+    },
+
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/feature" }
+    },
+
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string" },
+        "gaps": {
+          "type": "array",
+          "description": "Ce qui n'est pas couvert et pourquoi (non testable via API, info manquante...).",
+          "items": { "type": "string" }
+        },
+        "recommendations": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+
+  "$defs": {
+    "sourceRef": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "lines": { "type": "string", "description": "Ex. '42' ou '42-60'." },
+        "symbol": { "type": "string", "description": "Fonction/classe/route concernée." }
+      }
+    },
+
+    "feature": {
+      "type": "object",
+      "required": ["id", "name", "description", "changedBehaviors", "testCases"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^F[0-9]+$" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "userStory": { "type": "string", "description": "En tant que <acteur>, je veux <action>, afin de <bénéfice>." },
+        "tags": { "type": "array", "items": { "type": "string", "pattern": "^@" } },
+        "changedBehaviors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "after"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^B[0-9]+\\.[0-9]+$" },
+              "description": { "type": "string" },
+              "kind": { "enum": ["new", "modified", "removed", "unchanged-regression-risk"] },
+              "before": { "type": "string", "description": "Comportement avant (vide/absent si nouveau)." },
+              "after": { "type": "string" },
+              "sourceRefs": { "type": "array", "items": { "$ref": "#/$defs/sourceRef" } }
+            }
+          }
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^I[0-9]+\\.[0-9]+$" },
+              "type": { "enum": ["http", "graphql", "grpc", "websocket", "cli", "ui", "event", "job", "function", "database", "file"] },
+              "name": { "type": "string", "description": "Ex. 'POST /api/orders', 'mutation createOrder', 'Page /checkout'." },
+              "method": { "type": "string" },
+              "path": { "type": "string" },
+              "description": { "type": "string" },
+              "requestSchema": { "description": "Schéma ou exemple de la requête (si connu)." },
+              "responseSchema": { "description": "Schéma ou exemple de la réponse (si connu)." },
+              "sourceRefs": { "type": "array", "items": { "$ref": "#/$defs/sourceRef" } }
+            }
+          }
+        },
+        "background": {
+          "type": "object",
+          "description": "Préconditions communes à tous les cas de la feature (→ Background Gherkin, pre-request du dossier Postman).",
+          "additionalProperties": false,
+          "properties": {
+            "given": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "testCases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/testCase" }
+        }
+      }
+    },
+
+    "testCase": {
+      "type": "object",
+      "required": ["id", "title", "objective", "type", "technique", "priority", "level", "coversBehaviors", "gherkin", "expectedResult"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^TC-F[0-9]+-[0-9]{3}$" },
+        "title": { "type": "string", "description": "Titre court, devient le nom du Scenario et de la requête/dossier Postman." },
+        "objective": { "type": "string", "description": "Ce que le cas prouve, et pourquoi c'est important." },
+        "type": {
+          "enum": ["functional", "negative", "boundary", "validation", "business-rule", "state-transition", "authentication", "authorization", "security", "regression", "compatibility", "integration", "data-migration", "idempotency", "concurrency", "performance", "error-handling", "i18n", "accessibility", "usability"]
+        },
+        "technique": {
+          "enum": ["use-case", "equivalence-partitioning", "boundary-value", "decision-table", "state-transition", "error-guessing", "pairwise", "risk-based", "exploratory"]
+        },
+        "priority": { "enum": ["P1", "P2", "P3"] },
+        "severityIfFails": { "enum": ["blocker", "critical", "major", "minor", "trivial"] },
+        "level": { "enum": ["api", "ui", "e2e", "integration", "unit", "manual"] },
+        "automatable": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string", "pattern": "^@" } },
+        "coversBehaviors": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "sourceRefs": { "type": "array", "items": { "$ref": "#/$defs/sourceRef" } },
+        "actor": { "type": "string", "description": "Réf. vers context.actors[].id." },
+        "preconditions": { "type": "array", "items": { "type": "string" } },
+        "testDataRefs": { "type": "array", "items": { "type": "string" } },
+        "dependsOn": { "type": "array", "items": { "type": "string" } },
+
+        "gherkin": {
+          "type": "object",
+          "required": ["given", "when", "then"],
+          "additionalProperties": false,
+          "description": "Étapes en langage métier. Utiliser <param> pour les valeurs fournies par examples.",
+          "properties": {
+            "given": { "type": "array", "items": { "type": "string" } },
+            "when": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "then": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        },
+
+        "api": {
+          "type": "object",
+          "required": ["calls"],
+          "additionalProperties": false,
+          "description": "Présent si le cas est exécutable via API. Séquence ordonnée d'appels.",
+          "properties": {
+            "calls": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/apiCall" }
+            }
+          }
+        },
+
+        "expectedResult": { "type": "string", "description": "Résultat attendu global en langage naturel." },
+        "sideEffects": {
+          "type": "array",
+          "description": "Effets de bord attendus non observables dans la réponse (BD, événement, email, log, cache).",
+          "items": { "type": "string" }
+        },
+
+        "examples": {
+          "type": "array",
+          "description": "Jeux de données pour exécution data-driven (→ Scenario Outline / itérations Postman). Chaque values doit avoir les mêmes clés.",
+          "items": {
+            "type": "object",
+            "required": ["name", "values"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "values": { "type": "object" }
+            }
+          }
+        },
+
+        "cleanup": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "apiCall": {
+      "type": "object",
+      "required": ["name", "role", "method", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "enum": ["setup", "action", "verify", "cleanup"] },
+        "interfaceRef": { "type": "string", "description": "Réf. vers features[].interfaces[].id." },
+        "protocol": { "enum": ["http", "graphql", "grpc", "websocket"], "default": "http" },
+        "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] },
+        "url": { "type": "string", "description": "Ex. '{{baseUrl}}/api/orders/{{orderId}}'. Sans query string." },
+        "query": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean"] } },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "auth": { "type": "string", "description": "Réf. vers context.auth[].id. Absent = aucune auth explicite." },
+        "body": {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["none", "json", "raw", "urlencoded", "formdata", "graphql"] },
+            "contentType": { "type": "string" },
+            "content": { "description": "json: objet/tableau ; raw: string ; urlencoded/formdata: objet clé→valeur ; graphql: {query, variables}." }
+          }
+        },
+        "expect": {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "description": "Code HTTP attendu, ou liste de codes acceptables.",
+              "oneOf": [
+                { "type": "integer", "minimum": 100, "maximum": 599 },
+                { "type": "array", "items": { "type": "integer", "minimum": 100, "maximum": 599 }, "minItems": 1 },
+                { "type": "string", "pattern": "^\\{\\{[A-Za-z_][A-Za-z0-9_.-]*\\}\\}$" }
+              ]
+            },
+            "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+            "maxResponseTimeMs": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "extract": {
+          "type": "array",
+          "description": "Variables à extraire de la réponse pour les appels suivants (→ pm.collectionVariables.set).",
+          "items": {
+            "type": "object",
+            "required": ["variable", "from", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "variable": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$" },
+              "from": { "enum": ["body", "header", "cookie"] },
+              "path": { "type": "string", "description": "JSONPath pour body (ex. '$.data.id'), nom pour header/cookie." }
+            }
+          }
+        }
+      }
+    },
+
+    "assertion": {
+      "type": "object",
+      "required": ["target", "operator"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "enum": ["body", "header", "cookie", "responseTime", "schema"] },
+        "path": { "type": "string", "description": "JSONPath pour body (ex. '$.items[0].status'), nom pour header/cookie." },
+        "operator": {
+          "enum": ["equals", "notEquals", "exists", "notExists", "contains", "notContains", "matches", "gt", "gte", "lt", "lte", "isType", "lengthEquals", "lengthGte", "lengthLte", "oneOf", "matchesSchema", "isEmpty", "isNotEmpty"]
+        },
+        "value": { "description": "Valeur attendue. Pour isType : string|number|integer|boolean|object|array|null. Pour matchesSchema : un JSON Schema." },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

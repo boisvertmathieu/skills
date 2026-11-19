@@ -1,0 +1,388 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-19T15:00:00Z",
+  "language": "fr",
+  "source": {
+    "repository": "shop-api",
+    "branch": "feature/promo-codes",
+    "baseRef": "origin/main",
+    "headCommit": "a1b2c3d",
+    "diffScope": "branch",
+    "commitMessages": ["feat(orders): appliquer un code promo à la création de commande"],
+    "filesChanged": [
+      { "path": "src/routes/orders.js", "changeType": "modified", "summary": "Accepte le champ optionnel promoCode sur POST /api/orders", "testRelevant": true },
+      { "path": "src/services/pricing.js", "changeType": "modified", "summary": "Nouvelle fonction applyPromo : 10 % de remise si sous-total >= 100 $, code actif et non expiré", "testRelevant": true },
+      { "path": "src/models/promo.js", "changeType": "added", "summary": "Modèle PromoCode (code, percent, minSubtotal, expiresAt, active)", "testRelevant": true },
+      { "path": "README.md", "changeType": "modified", "summary": "Documentation du champ promoCode", "testRelevant": false }
+    ]
+  },
+  "changeSummary": {
+    "title": "Application d'un code promo à la création de commande",
+    "description": "POST /api/orders accepte désormais un champ optionnel promoCode. Si le code existe, est actif, non expiré et que le sous-total atteint le minimum, la remise est appliquée et exposée dans la réponse (discount, total).",
+    "intent": "feature",
+    "riskLevel": "high",
+    "riskRationale": "Impact direct sur le montant facturé ; une erreur d'arrondi ou de règle entraîne une perte financière.",
+    "impactedAreas": ["Création de commande", "Calcul des prix"],
+    "assumptions": [
+      "La remise est arrondie au cent le plus proche (Math.round dans pricing.js).",
+      "Un code invalide fait échouer la commande (400) plutôt que d'être ignoré, d'après orders.js L48-55."
+    ],
+    "openQuestions": [
+      "Le code promo est-il sensible à la casse ? Le code compare avec === sans normalisation.",
+      "Un même client peut-il réutiliser un code plusieurs fois ? Aucune limite n'est implémentée."
+    ],
+    "outOfScope": ["Interface d'administration des codes promo (non modifiée)"]
+  },
+  "context": {
+    "variables": [
+      { "name": "baseUrl", "description": "URL de base de l'API", "example": "http://localhost:3000" },
+      { "name": "customerToken", "description": "JWT d'un client standard", "example": "", "secret": true },
+      { "name": "otherCustomerToken", "description": "JWT d'un second client", "example": "", "secret": true },
+      { "name": "productId", "description": "Produit existant à 50.00 $", "example": "prod_50" }
+    ],
+    "auth": [
+      { "id": "auth-customer", "type": "bearer", "description": "Client standard", "actorRef": "customer", "config": { "token": "{{customerToken}}" } },
+      { "id": "auth-none", "type": "none", "description": "Aucune authentification" }
+    ],
+    "actors": [
+      { "id": "customer", "description": "Client authentifié", "roles": ["customer"] }
+    ],
+    "testData": [
+      { "id": "td-promo-active", "description": "Code PROMO10 : 10 %, minimum 100 $, actif, expire dans 30 jours", "setup": "Seed : INSERT INTO promo_codes (code, percent, min_subtotal, expires_at, active) VALUES ('PROMO10', 10, 100, now() + interval '30 days', true)", "data": { "code": "PROMO10", "percent": 10, "minSubtotal": 100 } },
+      { "id": "td-promo-expired", "description": "Code EXPIRED10 expiré depuis hier", "setup": "Seed : expires_at = now() - interval '1 day'", "data": { "code": "EXPIRED10" } },
+      { "id": "td-promo-inactive", "description": "Code OFF10 désactivé", "setup": "Seed : active = false", "data": { "code": "OFF10" } }
+    ]
+  },
+  "features": [
+    {
+      "id": "F1",
+      "name": "Code promo à la création de commande",
+      "description": "Application, validation et exposition de la remise d'un code promo lors de POST /api/orders.",
+      "userStory": "En tant que client, je veux saisir un code promo lors de ma commande afin d'obtenir une remise.",
+      "tags": ["@orders", "@promo"],
+      "changedBehaviors": [
+        {
+          "id": "B1.1",
+          "description": "Remise appliquée pour un code valide quand le sous-total atteint le minimum",
+          "kind": "new",
+          "before": "Le champ promoCode n'existait pas ; total = sous-total.",
+          "after": "discount = round(sous-total × percent / 100, 2) ; total = sous-total − discount.",
+          "sourceRefs": [{ "path": "src/services/pricing.js", "lines": "12-34", "symbol": "applyPromo" }]
+        },
+        {
+          "id": "B1.2",
+          "description": "Rejet des codes inexistants, expirés ou inactifs",
+          "kind": "new",
+          "after": "400 avec error.code = INVALID_PROMO_CODE ; aucune commande créée.",
+          "sourceRefs": [{ "path": "src/routes/orders.js", "lines": "48-55" }]
+        },
+        {
+          "id": "B1.3",
+          "description": "Création de commande sans code promo inchangée",
+          "kind": "unchanged-regression-risk",
+          "before": "Commande créée, total = sous-total.",
+          "after": "Identique ; discount = 0.",
+          "sourceRefs": [{ "path": "src/routes/orders.js", "lines": "30-47" }]
+        }
+      ],
+      "interfaces": [
+        {
+          "id": "I1.1",
+          "type": "http",
+          "name": "POST /api/orders",
+          "method": "POST",
+          "path": "/api/orders",
+          "description": "Crée une commande pour le client authentifié.",
+          "requestSchema": { "items": [{ "productId": "string", "quantity": "integer >= 1" }], "promoCode": "string (optionnel)" },
+          "responseSchema": { "id": "string", "subtotal": "number", "discount": "number", "total": "number", "promoCode": "string|null" },
+          "sourceRefs": [{ "path": "src/routes/orders.js", "lines": "28-70" }]
+        },
+        {
+          "id": "I1.2",
+          "type": "http",
+          "name": "GET /api/orders/:id",
+          "method": "GET",
+          "path": "/api/orders/:id",
+          "description": "Consulte une commande."
+        }
+      ],
+      "background": { "given": ["un client authentifié", "un produit à 50.00 $ disponible"] },
+      "testCases": [
+        {
+          "id": "TC-F1-001",
+          "title": "Remise de 10 % appliquée avec un code valide",
+          "objective": "Prouver que la remise est calculée, renvoyée et persistée pour un code valide au-dessus du minimum.",
+          "type": "functional",
+          "technique": "use-case",
+          "priority": "P1",
+          "severityIfFails": "critical",
+          "level": "api",
+          "automatable": true,
+          "tags": ["@smoke"],
+          "coversBehaviors": ["B1.1"],
+          "sourceRefs": [{ "path": "src/services/pricing.js", "lines": "12-34" }],
+          "actor": "customer",
+          "preconditions": ["Le code PROMO10 existe, actif et non expiré"],
+          "testDataRefs": ["td-promo-active"],
+          "gherkin": {
+            "given": ["un panier contenant 4 produits à 50.00 $", "le code promo \"PROMO10\" est actif"],
+            "when": ["le client crée la commande avec le code \"PROMO10\""],
+            "then": ["la commande est créée", "une remise de 20.00 $ est appliquée", "le total à payer est de 180.00 $"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande avec PROMO10",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "headers": { "Content-Type": "application/json" },
+                "auth": "auth-customer",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productId}}", "quantity": 4 }], "promoCode": "PROMO10" } },
+                "expect": {
+                  "status": 201,
+                  "assertions": [
+                    { "target": "body", "path": "$.subtotal", "operator": "equals", "value": 200 },
+                    { "target": "body", "path": "$.discount", "operator": "equals", "value": 20 },
+                    { "target": "body", "path": "$.total", "operator": "equals", "value": 180 },
+                    { "target": "body", "path": "$.promoCode", "operator": "equals", "value": "PROMO10" },
+                    { "target": "header", "path": "Location", "operator": "exists" }
+                  ],
+                  "maxResponseTimeMs": 1000
+                },
+                "extract": [{ "variable": "orderId", "from": "body", "path": "$.id" }]
+              },
+              {
+                "name": "Relire la commande",
+                "role": "verify",
+                "interfaceRef": "I1.2",
+                "method": "GET",
+                "url": "{{baseUrl}}/api/orders/{{orderId}}",
+                "auth": "auth-customer",
+                "expect": {
+                  "status": 200,
+                  "assertions": [
+                    { "target": "body", "path": "$.discount", "operator": "equals", "value": 20, "description": "La remise est persistée" },
+                    { "target": "body", "path": "$.total", "operator": "equals", "value": 180 }
+                  ]
+                }
+              }
+            ]
+          },
+          "expectedResult": "201 ; subtotal 200, discount 20, total 180 ; la commande relue présente les mêmes montants.",
+          "sideEffects": ["Ligne insérée dans orders avec promo_code = 'PROMO10' et discount = 20.00"]
+        },
+        {
+          "id": "TC-F1-002",
+          "title": "Seuil du sous-total minimum pour la remise",
+          "objective": "Vérifier la borne du minimum de 100 $ (juste en dessous, égal, juste au-dessus).",
+          "type": "boundary",
+          "technique": "boundary-value",
+          "priority": "P1",
+          "severityIfFails": "major",
+          "level": "api",
+          "automatable": true,
+          "tags": ["@boundary"],
+          "coversBehaviors": ["B1.1"],
+          "actor": "customer",
+          "testDataRefs": ["td-promo-active"],
+          "gherkin": {
+            "given": ["un panier contenant <quantite> produit(s) à <prix> $"],
+            "when": ["le client crée la commande avec le code \"PROMO10\""],
+            "then": ["la réponse a le statut <statut>", "la remise appliquée est de <remise> $"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande au seuil",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "auth": "auth-customer",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productIdForPrice}}", "quantity": "{{quantite}}" }], "promoCode": "PROMO10" } },
+                "expect": {
+                  "status": "{{statut}}",
+                  "assertions": [{ "target": "body", "path": "$.discount", "operator": "equals", "value": "{{remise}}" }]
+                }
+              }
+            ]
+          },
+          "examples": [
+            { "name": "sous le minimum (99.99)", "values": { "quantite": 1, "prix": "99.99", "productIdForPrice": "prod_9999", "statut": 201, "remise": 0 } },
+            { "name": "au minimum (100.00)", "values": { "quantite": 2, "prix": "50.00", "productIdForPrice": "prod_50", "statut": 201, "remise": 10 } },
+            { "name": "au-dessus (100.01)", "values": { "quantite": 1, "prix": "100.01", "productIdForPrice": "prod_10001", "statut": 201, "remise": 10 } }
+          ],
+          "expectedResult": "Aucune remise sous 100 $ ; 10 % à partir de 100.00 $ inclus.",
+          "notes": "Nécessite des produits aux prix 99.99 et 100.01 (à créer si absents). Hypothèse : sous le minimum, le code est ignoré sans erreur (pricing.js L20)."
+        },
+        {
+          "id": "TC-F1-003",
+          "title": "Rejet d'un code promo invalide",
+          "objective": "Vérifier qu'un code inexistant, expiré ou inactif est refusé et qu'aucune commande n'est créée.",
+          "type": "negative",
+          "technique": "equivalence-partitioning",
+          "priority": "P1",
+          "severityIfFails": "critical",
+          "level": "api",
+          "automatable": true,
+          "tags": ["@negative"],
+          "coversBehaviors": ["B1.2"],
+          "actor": "customer",
+          "testDataRefs": ["td-promo-expired", "td-promo-inactive"],
+          "gherkin": {
+            "given": ["un panier de 200.00 $", "le code promo <code> est <etat>"],
+            "when": ["le client crée la commande avec le code <code>"],
+            "then": ["la commande est refusée avec l'erreur INVALID_PROMO_CODE", "aucune commande n'est créée"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande avec un code invalide",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "auth": "auth-customer",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productId}}", "quantity": 4 }], "promoCode": "{{code}}" } },
+                "expect": {
+                  "status": 400,
+                  "assertions": [
+                    { "target": "body", "path": "$.error.code", "operator": "equals", "value": "INVALID_PROMO_CODE" },
+                    { "target": "body", "path": "$.id", "operator": "notExists" }
+                  ]
+                }
+              }
+            ]
+          },
+          "examples": [
+            { "name": "inexistant", "values": { "code": "NOPE", "etat": "inexistant" } },
+            { "name": "expiré", "values": { "code": "EXPIRED10", "etat": "expiré" } },
+            { "name": "inactif", "values": { "code": "OFF10", "etat": "inactif" } },
+            { "name": "chaîne vide", "values": { "code": "", "etat": "vide" } }
+          ],
+          "expectedResult": "400 INVALID_PROMO_CODE pour chaque variante ; la table orders reste inchangée.",
+          "sideEffects": ["Aucune ligne insérée dans orders"]
+        },
+        {
+          "id": "TC-F1-004",
+          "title": "Création de commande sans code promo inchangée",
+          "objective": "Non-régression : sans promoCode, la commande est créée comme avant avec discount = 0.",
+          "type": "regression",
+          "technique": "risk-based",
+          "priority": "P1",
+          "severityIfFails": "blocker",
+          "level": "api",
+          "automatable": true,
+          "tags": ["@regression", "@smoke"],
+          "coversBehaviors": ["B1.3"],
+          "actor": "customer",
+          "gherkin": {
+            "given": ["un panier contenant 2 produits à 50.00 $"],
+            "when": ["le client crée la commande sans code promo"],
+            "then": ["la commande est créée", "aucune remise n'est appliquée", "le total est de 100.00 $"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande sans promoCode",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "auth": "auth-customer",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productId}}", "quantity": 2 }] } },
+                "expect": {
+                  "status": 201,
+                  "assertions": [
+                    { "target": "body", "path": "$.discount", "operator": "equals", "value": 0 },
+                    { "target": "body", "path": "$.total", "operator": "equals", "value": 100 },
+                    { "target": "body", "path": "$.promoCode", "operator": "equals", "value": null }
+                  ]
+                }
+              }
+            ]
+          },
+          "expectedResult": "201 ; total = sous-total = 100 ; discount = 0 ; promoCode = null."
+        },
+        {
+          "id": "TC-F1-005",
+          "title": "Code promo refusé sans authentification",
+          "objective": "Vérifier que l'ajout du champ promoCode n'ouvre pas la création de commande aux appels anonymes.",
+          "type": "authentication",
+          "technique": "error-guessing",
+          "priority": "P2",
+          "severityIfFails": "critical",
+          "level": "api",
+          "automatable": true,
+          "tags": ["@security", "@negative"],
+          "coversBehaviors": ["B1.3"],
+          "gherkin": {
+            "given": ["un visiteur non authentifié"],
+            "when": ["il tente de créer une commande avec le code \"PROMO10\""],
+            "then": ["la requête est refusée pour authentification manquante"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande sans jeton",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "auth": "auth-none",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productId}}", "quantity": 4 }], "promoCode": "PROMO10" } },
+                "expect": { "status": 401 }
+              }
+            ]
+          },
+          "expectedResult": "401 ; aucune commande créée."
+        },
+        {
+          "id": "TC-F1-006",
+          "title": "Sensibilité à la casse du code promo",
+          "objective": "Documenter le comportement pour 'promo10' (minuscule) — question ouverte sur la normalisation.",
+          "type": "validation",
+          "technique": "error-guessing",
+          "priority": "P3",
+          "severityIfFails": "minor",
+          "level": "api",
+          "automatable": true,
+          "coversBehaviors": ["B1.2"],
+          "actor": "customer",
+          "testDataRefs": ["td-promo-active"],
+          "gherkin": {
+            "given": ["un panier de 200.00 $"],
+            "when": ["le client crée la commande avec le code \"promo10\""],
+            "then": ["le code est refusé comme invalide"]
+          },
+          "api": {
+            "calls": [
+              {
+                "name": "Créer la commande avec promo10",
+                "role": "action",
+                "interfaceRef": "I1.1",
+                "method": "POST",
+                "url": "{{baseUrl}}/api/orders",
+                "auth": "auth-customer",
+                "body": { "mode": "json", "contentType": "application/json", "content": { "items": [{ "productId": "{{productId}}", "quantity": 4 }], "promoCode": "promo10" } },
+                "expect": {
+                  "status": 400,
+                  "assertions": [{ "target": "body", "path": "$.error.code", "operator": "equals", "value": "INVALID_PROMO_CODE" }]
+                }
+              }
+            ]
+          },
+          "expectedResult": "400 INVALID_PROMO_CODE selon l'implémentation actuelle (comparaison stricte).",
+          "notes": "À confirmer avec le PO : si la casse doit être ignorée, ce cas révèle un défaut."
+        }
+      ]
+    }
+  ],
+  "coverage": {
+    "summary": "6 cas couvrant les 3 comportements modifiés ; 4 en P1.",
+    "gaps": ["Réutilisation multiple d'un code par un même client : règle non définie (question ouverte)."],
+    "recommendations": ["Ajouter un test unitaire de applyPromo sur les arrondis (ex. sous-total 133.33 → remise 13.33)."]
+  }
+}
