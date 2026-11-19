@@ -1,6 +1,6 @@
 # Skills
 
-Collection personnelle de [skills](https://docs.claude.com/en/docs/claude-code/skills) pour Claude Code et Claude.
+Collection personnelle de skills pour agents IA. Les skills suivent le format ouvert **Agent Skills** (un dossier contenant un `SKILL.md` avec un frontmatter `name` / `description`, accompagné de références et de scripts) et ne dépendent d'aucun agent, IDE ou modèle en particulier.
 
 ## Skills disponibles
 
@@ -10,66 +10,69 @@ Collection personnelle de [skills](https://docs.claude.com/en/docs/claude-code/s
 
 ## Installation
 
-### Option 1 — Marketplace de plugins Claude Code (recommandé)
+### Agents qui prennent en charge les skills
 
-Dans Claude Code :
-
-```
-/plugin marketplace add boisvertmathieu/skills
-```
-
-```
-/plugin install qa-test-cases@boisvertmathieu-skills
-```
-
-### Option 2 — Copie manuelle
-
-Pour tous vos projets :
+Copiez le dossier du skill dans le répertoire de skills de votre agent :
 
 ```bash
-git clone https://github.com/boisvertmathieu/skills.git && mkdir -p ~/.claude/skills && cp -r skills/skills/qa-test-cases ~/.claude/skills/
+git clone https://github.com/boisvertmathieu/skills.git
 ```
 
-Ou pour un seul projet, copiez le dossier du skill dans `.claude/skills/` à la racine du projet.
+```bash
+cp -r skills/skills/qa-test-cases <REPERTOIRE_DE_SKILLS_DE_VOTRE_AGENT>/
+```
+
+Exemples de répertoires (ils évoluent : vérifiez la documentation de votre agent) :
+
+| Agent | Personnel | Par projet |
+|---|---|---|
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` |
+| GitHub Copilot | `~/.copilot/skills/` | `.github/skills/` |
+| OpenAI Codex | `~/.codex/skills/` | — |
+
+### Agents sans prise en charge native
+
+Le `SKILL.md` est un simple fichier Markdown d'instructions. Vous pouvez :
+- le référencer depuis le fichier d'instructions de votre agent (ex. `AGENTS.md`) : « Pour extraire des cas de tests, suis `skills/qa-test-cases/SKILL.md` » ;
+- ou le fournir directement comme instructions ou prompt, avec le dossier du skill accessible pour les scripts et références.
+
+### Intégrations optionnelles
+
+Le fichier `.claude-plugin/marketplace.json` permet aussi d'installer les skills comme plugins dans Claude Code (`/plugin marketplace add boisvertmathieu/skills`). Il ne sert qu'à cette intégration : les skills eux-mêmes n'en dépendent pas.
 
 ## Utilisation de `qa-test-cases`
 
-Dans un dépôt avec des modifications en cours :
+Dans un dépôt avec des modifications en cours, demandez à votre agent par exemple :
 
-```
-/qa-test-cases
-```
+- « Extrais les cas de tests de mes changements »
+- « Fais l'analyse QA de ma branche par rapport à `main` »
 
-ou en langage naturel : « Extrais les cas de tests de mes changements », « Fais l'analyse QA de ma branche par rapport à main ».
-
-Options : `--base <ref>`, `--staged`, `--output <chemin>`, `--lang <code>`.
+Options possibles dans la demande : base de comparaison, index seulement, chemin de sortie, langue, focus (API, UI…).
 
 Le skill produit `qa-test-cases.json` (schéma : [`references/output-schema.json`](skills/qa-test-cases/references/output-schema.json), exemple : [`examples/example-output.json`](skills/qa-test-cases/examples/example-output.json)). Ensuite :
 
-```
-Génère une collection Postman à partir de qa-test-cases.json
-```
-
-```
-Génère les fichiers .feature Gherkin à partir de qa-test-cases.json
-```
+- « Génère une collection Postman à partir de `qa-test-cases.json` »
+- « Génère les fichiers `.feature` Gherkin à partir de `qa-test-cases.json` »
 
 La correspondance JSON → Postman / Gherkin est documentée dans [`references/consumer-mapping.md`](skills/qa-test-cases/references/consumer-mapping.md).
+
+Prérequis des scripts : `git`, `bash`, `python3` (bibliothèque standard uniquement).
 
 ## Structure du dépôt
 
 ```
-.claude-plugin/marketplace.json   # déclare chaque skill comme plugin installable
 skills/
   <nom-du-skill>/
     SKILL.md                      # frontmatter (name, description) + instructions
     references/                   # documentation chargée à la demande
     scripts/                      # scripts exécutables utilisés par le skill
     examples/                     # exemples de sortie
+.claude-plugin/marketplace.json   # optionnel : intégration plugin Claude Code
 ```
 
 ## Ajouter un skill
 
-1. Créer `skills/<nom-du-skill>/SKILL.md` avec un frontmatter `name` (identique au nom du dossier) et une `description` qui dit **quoi** et **quand** l'utiliser.
-2. Ajouter une entrée dans `plugins` de `.claude-plugin/marketplace.json` (`"skills": ["./skills/<nom-du-skill>"]`).
+1. Créer `skills/<nom-du-skill>/SKILL.md` avec un frontmatter `name` (identique au nom du dossier, en minuscules et tirets) et une `description` qui dit **quoi** faire et **quand** l'utiliser.
+2. Rester agnostique : pas d'outils, de commandes ou de chemins propres à un agent dans les instructions. Les scripts doivent utiliser des outils standards, et les chemins être relatifs au dossier du skill.
 3. Ajouter une ligne au tableau « Skills disponibles » ci-dessus.
+4. Optionnel : ajouter une entrée dans `plugins` de `.claude-plugin/marketplace.json`.

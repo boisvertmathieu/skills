@@ -1,6 +1,7 @@
 ---
 name: qa-test-cases
 description: Analyse les modifications courantes d'un dépôt git (working tree, index, ou branche vs base) et en extrait, comme le ferait un analyste QA, tous les cas de tests pertinents couvrant la nature complète du changement (fonctionnels, négatifs, limites, sécurité, régression, etc.). Produit un fichier JSON structuré et validé, conçu pour être réutilisé par un agent afin de générer une collection Postman ou des scénarios Gherkin. Utiliser quand l'utilisateur demande des cas de tests, un plan de tests, une analyse QA, des scénarios de test ou des tests d'acceptation à partir d'un diff, d'une PR, d'une branche ou de « mes changements » — aussi en anglais (test cases from diff, QA analysis, test plan, Postman, Gherkin, BDD scenarios).
+compatibility: Indépendant de l'agent et du modèle. Requiert git, bash et python3 (bibliothèque standard uniquement) pour les scripts ; fonctionne aussi sans exécution de commandes à partir d'un diff fourni.
 ---
 
 # Extraction de cas de tests QA à partir des modifications d'un dépôt
@@ -9,13 +10,22 @@ Tu joues le rôle d'un **analyste QA senior**. Ton objectif n'est pas de tester 
 
 Le livrable est un **fichier JSON conforme à `references/output-schema.json`**, réutilisable tel quel par un autre agent pour produire une collection Postman ou des fichiers `.feature` Gherkin. La qualité du JSON (complétude, cohérence des références, précision des assertions) est aussi importante que la qualité des cas de tests.
 
-## Arguments acceptés (optionnels)
+## Prérequis et portabilité
 
-- `--base <ref>` : compare la branche courante (plus les changements non commités) à `<ref>` (ex. `main`, `origin/develop`).
-- `--staged` : seulement les changements indexés.
-- `--output <chemin>` : chemin du fichier JSON produit (défaut : `qa-test-cases.json` à la racine du dépôt).
-- `--lang <code>` : langue des textes (défaut : langue de l'utilisateur). Les **clés JSON et valeurs d'énumération restent toujours en anglais**.
-- Un focus libre (ex. « seulement l'API », « niveau UI ») : respecte-le et note-le dans `changeSummary.outOfScope`.
+Ce skill n'est lié à aucun agent, IDE ou modèle en particulier. Il suppose seulement que tu peux lire des fichiers, exécuter des commandes shell et écrire un fichier. Dans ce document, `<SKILL_DIR>` désigne le répertoire qui contient ce `SKILL.md` ; les chemins `scripts/`, `references/` et `examples/` sont relatifs à ce répertoire.
+
+Si ton environnement ne permet pas d'exécuter des commandes :
+- travaille à partir du diff et des fichiers fournis par l'utilisateur (demande-les s'ils manquent) ;
+- applique manuellement les vérifications décrites à l'étape 5 ;
+- renvoie le JSON dans ta réponse s'il est impossible d'écrire un fichier.
+
+## Options (exprimées par l'utilisateur dans sa demande)
+
+- **Base de comparaison** (ex. « par rapport à `main` ») : compare la branche courante, plus les changements non commités, à cette référence.
+- **Index seulement** (ex. « seulement ce qui est stagé ») : uniquement les changements indexés.
+- **Fichier de sortie** : chemin du JSON produit (défaut : `qa-test-cases.json` à la racine du dépôt).
+- **Langue** des textes (défaut : langue de l'utilisateur). Les **clés JSON et valeurs d'énumération restent toujours en anglais**.
+- **Focus** (ex. « seulement l'API », « niveau UI ») : respecte-le et note ce qui est exclu dans `changeSummary.outOfScope`.
 
 ## Workflow
 
@@ -24,19 +34,21 @@ Le livrable est un **fichier JSON conforme à `references/output-schema.json`**,
 Exécute le script de collecte depuis la racine du dépôt analysé :
 
 ```bash
-bash <chemin-du-skill>/scripts/collect_changes.sh [--base <ref>] [--staged]
+bash <SKILL_DIR>/scripts/collect_changes.sh [--base <ref>] [--staged]
 ```
 
 Sans argument, il détecte automatiquement la portée : changements non commités s'il y en a, sinon commits de la branche courante non présents dans la branche par défaut. Il affiche les métadonnées (dépôt, branche, commit, portée), la liste des fichiers modifiés, les statistiques, le diff complet et les fichiers non suivis.
 
-Si le diff est vide, arrête-toi et dis-le à l'utilisateur (propose `--base`).
+Sans script, l'équivalent manuel est : `git status`, `git diff HEAD` (ou `git diff <merge-base>` pour une branche, `git diff --cached` pour l'index), `git log <base>..HEAD` et la lecture des fichiers non suivis.
+
+Si le diff est vide, arrête-toi et dis-le à l'utilisateur (propose de préciser une base de comparaison).
 
 ### 2. Comprendre le changement (ne te limite pas au diff)
 
 Un hunk isolé ment souvent. Pour chaque fichier significatif :
 
 - **Lis le fichier complet** (et pas seulement les lignes modifiées) pour comprendre le contexte.
-- **Remonte aux points d'entrée** : routes/contrôleurs, résolveurs GraphQL, handlers d'événements, commandes CLI, jobs planifiés, composants UI. Cherche les appelants des fonctions modifiées (`grep`).
+- **Remonte aux points d'entrée** : routes/contrôleurs, résolveurs GraphQL, handlers d'événements, commandes CLI, jobs planifiés, composants UI. Cherche les appelants des fonctions modifiées (recherche textuelle dans le dépôt, ex. `grep -rn`).
 - **Identifie les contrats** : DTO, schémas de validation, modèles, migrations, OpenAPI/Swagger, types, messages d'erreur, codes HTTP, permissions/rôles, feature flags, configuration.
 - **Lis les tests existants** liés au code modifié : ils révèlent l'intention et les cas déjà couverts.
 - **Lis les messages de commit** et, si disponible, la description de PR ou le ticket mentionné.
@@ -84,7 +96,7 @@ Points essentiels :
 ### 5. Valider
 
 ```bash
-python3 <chemin-du-skill>/scripts/validate_output.py <fichier.json>
+python3 <SKILL_DIR>/scripts/validate_output.py <fichier.json>
 ```
 
 Le validateur vérifie la structure, les énumérations, l'unicité des IDs, l'intégrité référentielle (behaviors, interfaces, auth, données de test, dépendances, variables) et la couverture de chaque comportement. **Corrige toutes les erreurs** et examine les avertissements avant de livrer. Itère jusqu'à obtenir `OK`.

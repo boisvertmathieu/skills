@@ -4,7 +4,7 @@
     "name": "boisvertmathieu"
   },
   "metadata": {
-    "description": "Collection personnelle de skills pour Claude Code / Claude.",
+    "description": "Collection personnelle de skills agnostiques (format Agent Skills).",
     "version": "1.0.0"
   },
   "plugins": [
